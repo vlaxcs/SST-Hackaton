@@ -1,0 +1,392 @@
+@model NoteIndexViewModel
+@{
+    ViewData["Title"] = "Notițele mele";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="mb-0">Notițele mele</h1>
+    <div class="d-flex gap-2">
+        <button id="toggleSelectionModeBtn" type="button" class="btn btn-sm btn-outline-primary px-3">Selectează multiple</button>
+        <button id="openNewNoteModalBtn" type="button" class="btn btn-sm btn-primary px-3">Adaugă notiță</button>
+    </div>
+</div>
+
+<div id="newNoteTypeModal" class="mystic-modal d-none" role="dialog" aria-modal="true" aria-labelledby="newNoteTypeModalTitle">
+    <div class="mystic-modal-backdrop" data-close-modal="true"></div>
+    <div class="mystic-modal-panel mystic-panel p-4 p-md-5">
+        <h3 id="newNoteTypeModalTitle" class="mb-2">Alege tipul notiței</h3>
+        <p class="text-muted mb-4">După creare, tipul notiței nu mai poate fi schimbat.</p>
+        <div class="d-flex flex-column gap-2">
+            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="1">Notiță text</a>
+            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="2">Listă de bifat</a>
+            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="3">Înregistrare audio</a>
+            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="4">Înregistrare video</a>
+            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="5">Fotografie</a>
+            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="6">Desen</a>
+            <button id="cancelNewNoteTypeModal" type="button" class="btn btn-primary mt-2">Renunță</button>
+        </div>
+    </div>
+</div>
+
+<form id="notesSearchForm" asp-action="Index" method="get" class="row g-2 mb-4">
+    <div class="col-md-4">
+        <input id="searchTerm" type="text" name="searchTerm" value="@Model.SearchTerm" class="form-control" placeholder="Caută în titlu, conținut sau dată" />
+    </div>
+    <div class="col-md-2">
+        <select id="noteTypeId" name="noteTypeId" class="form-select" asp-items="Model.NoteTypeOptions">
+            <option value="">Toate tipurile de notițe</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select id="folderName" name="folderName" class="form-select">
+            <option value="">Toate folderele</option>
+            @foreach (var folder in Model.FolderOptions)
+            {
+                <option value="@folder" selected="@(Model.FolderName == folder)">@folder</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select id="sortOrder" name="sortOrder" class="form-select">
+            <option value="modified_desc" selected="@(Model.SortOrder == "modified_desc")">Modificate (cele mai noi)</option>
+            <option value="modified_asc" selected="@(Model.SortOrder == "modified_asc")">Modificate (cele mai vechi)</option>
+            <option value="created_desc" selected="@(Model.SortOrder == "created_desc")">Create (cele mai noi)</option>
+            <option value="created_asc" selected="@(Model.SortOrder == "created_asc")">Create (cele mai vechi)</option>
+            <option value="title_asc" selected="@(Model.SortOrder == "title_asc")">Titlu (A-Z)</option>
+            <option value="title_desc" selected="@(Model.SortOrder == "title_desc")">Titlu (Z-A)</option>
+        </select>
+    </div>
+    <div class="col-md-1 d-grid">
+        <button type="submit" class="btn btn-outline-primary">Caută</button>
+    </div>
+</form>
+
+<form id="bulkActionsForm" method="post" class="d-none mb-3 mystic-panel p-3 bulk-actions-mobile-sticky">
+    @Html.AntiForgeryToken()
+    <input id="selectedNoteIds" name="selectedNoteIds" type="hidden" />
+    <div class="d-flex flex-wrap align-items-end gap-2">
+        <div class="flex-grow-1" style="min-width: 220px;">
+            <label for="bulkFolderName" class="form-label mb-1">Folder pentru notițele selectate</label>
+            <input id="bulkFolderName" name="folderName" type="text" class="form-control" list="folderOptions" placeholder="Ex: Personal, Idei, Muncă" />
+            <datalist id="folderOptions">
+                @foreach (var folder in Model.FolderOptions)
+                {
+                    <option value="@folder"></option>
+                }
+            </datalist>
+        </div>
+        <button type="submit" formaction="@Url.Action("BulkMoveToFolder", "Notes")" class="btn btn-outline-primary" id="bulkMoveBtn" disabled>Mută în folder</button>
+        <button type="submit" formaction="@Url.Action("BulkDelete", "Notes")" class="btn btn-outline-danger" id="bulkDeleteBtn" disabled onclick="return confirm('Ești sigur că vrei să ștergi notițele selectate?');">Șterge selectate</button>
+        <button type="button" id="cancelSelectionBtn" class="btn btn-outline-secondary">Anulează selecția</button>
+    </div>
+    <div id="selectionCountText" class="small text-muted mt-2">0 notițe selectate</div>
+</form>
+
+@if (!Model.Notes.Any())
+{
+    <div class="alert alert-info">
+        Nu există notițe. Creează prima notiță.
+    </div>
+}
+else
+{
+    <div id="notesGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        @foreach (var note in Model.Notes)
+        {
+            <div class="col">
+                <div class="card h-100 shadow-sm note-card" data-note-card="@note.Id">
+                    <div class="note-select-box d-none px-3 pt-3">
+                        <div class="form-check">
+                            <input class="form-check-input note-select-checkbox" type="checkbox" data-note-checkbox="@note.Id" />
+                            <label class="form-check-label">Selectează</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title text-truncate">@note.Title</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">@NoteContentHelper.NoteTypeNameRo(note.NoteType?.Name)</h6>
+                        @if (!string.IsNullOrWhiteSpace(note.FolderName))
+                        {
+                            <p class="small mb-2">
+                                <a class="badge text-bg-secondary text-decoration-none"
+                                   asp-action="Index"
+                                   asp-route-folderName="@note.FolderName"
+                                   asp-route-searchTerm="@Model.SearchTerm"
+                                   asp-route-noteTypeId="@Model.NoteTypeId"
+                                   asp-route-sortOrder="@Model.SortOrder">
+                                    Folder: @note.FolderName
+                                </a>
+                            </p>
+                        }
+
+                        @if (NoteContentHelper.IsCheckboxTypeName(note.NoteType?.Name))
+                        {
+                            var allItems = NoteContentHelper.ParseChecklistContent(note.Content);
+                            var previewLimit = 6;
+                            var items = allItems.Take(previewLimit);
+                            var remainingCount = Math.Max(0, allItems.Count - previewLimit);
+                            <ul class="list-unstyled small mb-2">
+                                @foreach (var item in items)
+                                {
+                                    <li><input type="checkbox" disabled checked="@item.IsChecked" /> @item.Text</li>
+                                }
+                            </ul>
+                            @if (remainingCount > 0)
+                            {
+                                <p class="small text-muted mb-0">Și alte @remainingCount checkboxuri</p>
+                            }
+                        }
+                        else if (NoteContentHelper.IsAttachmentNoteTypeName(note.NoteType?.Name))
+                        {
+                            <p class="card-text mb-2">
+                                @(string.IsNullOrWhiteSpace(note.Content)
+                                    ? "Fără descriere"
+                                    : (note.Content.Length > 180 ? note.Content[..180] + "..." : note.Content))
+                            </p>
+
+                            <p class="small text-muted mb-0">
+                                @note.Attachments.Count atașament(e)
+                            </p>
+                        }
+                        else
+                        {
+                            <p class="card-text">
+                                @(note.Content.Length > 220 ? note.Content[..220] + "..." : note.Content)
+                            </p>
+                        }
+                    </div>
+                    <div class="card-footer bg-white small text-muted">
+                        <div>Creat: @note.CreatedAtUtc.ToLocalTime().ToString("g")</div>
+                        <div>Modificat: @note.ModifiedAtUtc.ToLocalTime().ToString("g")</div>
+                        <div class="mt-2 d-flex gap-2 flex-wrap">
+                            <a asp-action="Details" asp-route-id="@note.Id" class="btn btn-sm btn-outline-secondary">Vizualizează / Editează</a>
+                            <a asp-action="Delete" asp-route-id="@note.Id" class="btn btn-sm btn-outline-danger">Șterge</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            const form = document.getElementById("notesSearchForm");
+            const searchInput = document.getElementById("searchTerm");
+            const noteType = document.getElementById("noteTypeId");
+            const folderName = document.getElementById("folderName");
+            const sortOrder = document.getElementById("sortOrder");
+            const notesGrid = document.getElementById("notesGrid");
+            const toggleSelectionModeBtn = document.getElementById("toggleSelectionModeBtn");
+            const cancelSelectionBtn = document.getElementById("cancelSelectionBtn");
+            const bulkActionsForm = document.getElementById("bulkActionsForm");
+            const selectedNoteIdsInput = document.getElementById("selectedNoteIds");
+            const bulkFolderName = document.getElementById("bulkFolderName");
+            const bulkMoveBtn = document.getElementById("bulkMoveBtn");
+            const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
+            const selectionCountText = document.getElementById("selectionCountText");
+            const openNewNoteModalBtn = document.getElementById("openNewNoteModalBtn");
+            const newNoteTypeModal = document.getElementById("newNoteTypeModal");
+            const cancelNewNoteTypeModal = document.getElementById("cancelNewNoteTypeModal");
+            const modalBackdrop = newNoteTypeModal?.querySelector("[data-close-modal='true']");
+
+            if (!form || !searchInput || !noteType || !folderName || !sortOrder || !newNoteTypeModal) {
+                return;
+            }
+
+            const openModal = () => {
+                newNoteTypeModal.classList.remove("d-none");
+                document.body.classList.add("mystic-modal-open");
+            };
+
+            const closeModal = () => {
+                newNoteTypeModal.classList.add("d-none");
+                document.body.classList.remove("mystic-modal-open");
+            };
+
+            openNewNoteModalBtn?.addEventListener("click", openModal);
+            cancelNewNoteTypeModal?.addEventListener("click", closeModal);
+            modalBackdrop?.addEventListener("click", closeModal);
+
+            document.addEventListener("keydown", event => {
+                if (event.key === "Escape") {
+                    closeModal();
+                }
+            });
+
+            const params = new URLSearchParams(window.location.search);
+            if (params.has("searchTerm")) {
+                searchInput.value = params.get("searchTerm") ?? "";
+            }
+            if (params.has("noteTypeId")) {
+                noteType.value = params.get("noteTypeId") ?? "";
+            }
+            if (params.has("folderName")) {
+                folderName.value = params.get("folderName") ?? "";
+            }
+            if (params.has("sortOrder")) {
+                sortOrder.value = params.get("sortOrder") ?? "modified_desc";
+            }
+
+            let timerId = null;
+            const debounceSubmit = () => {
+                window.clearTimeout(timerId);
+                timerId = window.setTimeout(() => {
+                    form.requestSubmit();
+                }, 500);
+            };
+
+            searchInput.addEventListener("input", debounceSubmit);
+            noteType.addEventListener("change", debounceSubmit);
+            folderName.addEventListener("change", debounceSubmit);
+            sortOrder.addEventListener("change", debounceSubmit);
+
+            if (params.get("openNewNoteModal") === "1") {
+                openModal();
+            }
+
+            const selection = new Set();
+            let selectionMode = false;
+            const noteCards = Array.from(document.querySelectorAll("[data-note-card]"));
+            const checkboxes = Array.from(document.querySelectorAll("[data-note-checkbox]"));
+            const selectContainers = Array.from(document.querySelectorAll(".note-select-box"));
+
+            const isInteractiveElement = element => {
+                if (!element) {
+                    return false;
+                }
+
+                return !!element.closest("a,button,input,select,textarea,label,summary");
+            };
+
+            const renderSelectionState = () => {
+                noteCards.forEach(card => {
+                    const noteId = Number(card.getAttribute("data-note-card"));
+                    card.classList.toggle("note-card-selected", selection.has(noteId));
+                });
+
+                checkboxes.forEach(checkbox => {
+                    const noteId = Number(checkbox.getAttribute("data-note-checkbox"));
+                    checkbox.checked = selection.has(noteId);
+                });
+
+                selectedNoteIdsInput.value = Array.from(selection).join(",");
+
+                const selectedCount = selection.size;
+                if (selectionCountText) {
+                    selectionCountText.textContent = `${selectedCount} notițe selectate`;
+                }
+
+                if (bulkDeleteBtn) {
+                    bulkDeleteBtn.disabled = selectedCount === 0;
+                }
+
+                if (bulkMoveBtn) {
+                    const folderFilled = ((bulkFolderName?.value || "").trim().length > 0);
+                    bulkMoveBtn.disabled = selectedCount === 0 || !folderFilled;
+                }
+            };
+
+            const setSelectionMode = enabled => {
+                selectionMode = enabled;
+                bulkActionsForm?.classList.toggle("d-none", !selectionMode);
+                notesGrid?.classList.toggle("selection-mode", selectionMode);
+                selectContainers.forEach(box => box.classList.toggle("d-none", !selectionMode));
+                toggleSelectionModeBtn.textContent = selectionMode ? "Ieși din selecție" : "Selectează multiple";
+
+                if (!selectionMode) {
+                    selection.clear();
+                }
+
+                renderSelectionState();
+            };
+
+            const toggleNote = noteId => {
+                if (selection.has(noteId)) {
+                    selection.delete(noteId);
+                } else {
+                    selection.add(noteId);
+                }
+
+                renderSelectionState();
+            };
+
+            toggleSelectionModeBtn?.addEventListener("click", () => {
+                setSelectionMode(!selectionMode);
+            });
+
+            cancelSelectionBtn?.addEventListener("click", () => {
+                setSelectionMode(false);
+            });
+
+            bulkFolderName?.addEventListener("input", renderSelectionState);
+
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener("change", event => {
+                    const noteId = Number(checkbox.getAttribute("data-note-checkbox"));
+                    if (!selectionMode) {
+                        setSelectionMode(true);
+                    }
+
+                    if ((event.target).checked) {
+                        selection.add(noteId);
+                    } else {
+                        selection.delete(noteId);
+                    }
+
+                    renderSelectionState();
+                });
+            });
+
+            noteCards.forEach(card => {
+                const noteId = Number(card.getAttribute("data-note-card"));
+                let longPressTimerId = null;
+
+                const startLongPress = event => {
+                    if (selectionMode || isInteractiveElement(event.target)) {
+                        return;
+                    }
+
+                    longPressTimerId = window.setTimeout(() => {
+                        setSelectionMode(true);
+                        selection.add(noteId);
+                        renderSelectionState();
+                    }, 450);
+                };
+
+                const clearLongPress = () => {
+                    if (longPressTimerId !== null) {
+                        window.clearTimeout(longPressTimerId);
+                        longPressTimerId = null;
+                    }
+                };
+
+                card.addEventListener("pointerdown", startLongPress);
+                card.addEventListener("pointerup", clearLongPress);
+                card.addEventListener("pointerleave", clearLongPress);
+                card.addEventListener("pointercancel", clearLongPress);
+
+                card.addEventListener("click", event => {
+                    if (!selectionMode) {
+                        return;
+                    }
+
+                    if (event.target.closest("[data-note-checkbox]")) {
+                        return;
+                    }
+
+                    if (isInteractiveElement(event.target) && !event.target.closest("[data-note-checkbox]")) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+
+                    toggleNote(noteId);
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+            });
+
+            renderSelectionState();
+        })();
+    </script>
+}

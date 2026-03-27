@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.db-shm
+*.db-wal
+app.db
+/App_Data

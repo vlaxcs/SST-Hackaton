@@ -1,0 +1,718 @@
+@model Note
+@{
+    ViewData["Title"] = "Creează notiță";
+
+    var noteTypeLabel = Model.NoteTypeId switch
+    {
+        2 => "Listă de bifat",
+        3 => "Înregistrare audio",
+        4 => "Înregistrare video",
+        5 => "Fotografie",
+        6 => "Desen",
+        _ => "Text"
+    };
+}
+
+<h1>Creează notiță</h1>
+<hr />
+<div class="row">
+    <div class="col-md-9 col-lg-8">
+        <form asp-action="Create" method="post" enctype="multipart/form-data">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+            <div class="mb-3">
+                <label asp-for="Title" class="form-label"></label>
+                <input id="noteTitleInput" asp-for="Title" class="form-control" />
+                <span asp-validation-for="Title" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="NoteTypeId" class="form-label"></label>
+                <input type="hidden" asp-for="NoteTypeId" />
+                <input type="text" class="form-control" value="@noteTypeLabel" readonly />
+                <span asp-validation-for="NoteTypeId" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Content" class="form-label">Descriere</label>
+                <textarea asp-for="Content" class="form-control d-none" rows="8"></textarea>
+                <textarea id="textContentEditor" class="form-control" rows="8" placeholder="Scrie descrierea notiței aici..."></textarea>
+
+                <div id="checklistEditor" class="d-none mt-2">
+                    <div class="input-group mb-2">
+                        <input id="newChecklistItem" type="text" class="form-control" placeholder="Adaugă un element în listă" />
+                        <button id="addChecklistItemBtn" class="btn btn-outline-primary" type="button">Adaugă</button>
+                    </div>
+                    <ul id="checklistItems" class="list-group"></ul>
+                </div>
+
+                <span asp-validation-for="Content" class="text-danger"></span>
+            </div>
+
+            <div id="attachmentStudio" class="d-none">
+                <div class="mb-2">
+                    <label class="form-label" for="uploadedFiles">Atașamente</label>
+                    <div id="uploadDropZone" class="upload-drop-zone rounded p-3 mb-2" role="button" tabindex="0" aria-label="Adaugă atașamente prin glisare sau selectare">
+                        <div class="fw-semibold">Trage fișierele aici</div>
+                        <div class="small text-muted mb-2">sau</div>
+                        <button id="browseFilesBtn" type="button" class="btn btn-outline-primary btn-sm">Alege fișiere</button>
+                    </div>
+                    <input id="uploadedFiles" name="uploadedFiles" type="file" class="d-none" multiple />
+                    <span class="text-danger" data-valmsg-for="uploadedFiles"></span>
+                </div>
+
+                <div id="attachmentInfo" class="small text-muted mb-2"></div>
+                <div id="selectedFilesPreview" class="row g-3 mb-3"></div>
+
+                <div id="audioTools" class="d-none mb-3">
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button id="startAudioBtn" type="button" class="btn btn-outline-primary btn-sm">Începe înregistrarea audio</button>
+                        <button id="stopAudioBtn" type="button" class="btn btn-outline-secondary btn-sm" disabled>Oprește</button>
+                    </div>
+                    <audio id="audioPreview" controls class="w-100 d-none"></audio>
+                </div>
+
+                <div id="videoTools" class="d-none mb-3">
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button id="startVideoBtn" type="button" class="btn btn-outline-primary btn-sm">Începe înregistrarea video</button>
+                        <button id="stopVideoBtn" type="button" class="btn btn-outline-secondary btn-sm" disabled>Oprește</button>
+                    </div>
+                    <video id="liveVideoPreview" class="w-100 rounded border mb-2 d-none" autoplay muted playsinline></video>
+                    <video id="recordedVideoPreview" class="w-100 rounded border d-none" controls playsinline></video>
+                </div>
+
+                <div id="photoTools" class="d-none mb-3">
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button id="startPhotoCameraBtn" type="button" class="btn btn-outline-primary btn-sm">Pornește camera</button>
+                        <button id="capturePhotoBtn" type="button" class="btn btn-outline-primary btn-sm" disabled>Capturează foto</button>
+                        <button id="stopPhotoCameraBtn" type="button" class="btn btn-outline-secondary btn-sm" disabled>Oprește camera</button>
+                    </div>
+                    <video id="photoVideoPreview" class="w-100 rounded border mb-2 d-none" autoplay muted playsinline></video>
+                    <canvas id="photoCanvas" class="w-100 rounded border d-none"></canvas>
+                </div>
+
+                <div id="drawingTools" class="d-none mb-3">
+                    <p class="small text-muted mb-2">Desenează în canvas și salvează desenul ca atașament imagine.</p>
+                    <div class="d-flex gap-2 flex-wrap mb-2" id="drawingColorPalette">
+                        <button type="button" class="btn btn-sm btn-outline-light drawing-color drawing-color-active" data-color="#f1d9a9" title="Auriu">Auriu</button>
+                        <button type="button" class="btn btn-sm btn-outline-light drawing-color" data-color="#ff6b6b" title="Coral">Coral</button>
+                        <button type="button" class="btn btn-sm btn-outline-light drawing-color" data-color="#7dd3fc" title="Azur">Azur</button>
+                        <button type="button" class="btn btn-sm btn-outline-light drawing-color" data-color="#86efac" title="Smarald">Smarald</button>
+                        <button type="button" class="btn btn-sm btn-outline-light drawing-color" data-color="#c4b5fd" title="Lavandă">Lavandă</button>
+                        <button type="button" class="btn btn-sm btn-outline-light drawing-color" data-color="#ffffff" title="Alb">Alb</button>
+                    </div>
+                    <canvas id="drawingCanvas" width="900" height="320" class="w-100 rounded border"></canvas>
+                    <div class="d-flex gap-2 mt-2 flex-wrap">
+                        <button id="clearDrawingBtn" type="button" class="btn btn-outline-secondary btn-sm">Șterge desenul</button>
+                        <button id="saveDrawingBtn" type="button" class="btn btn-outline-primary btn-sm">Salvează desenul ca imagine</button>
+                    </div>
+                    <img id="drawingPreviewImage" class="img-fluid rounded border mt-2 d-none" alt="Preview desen" style="max-height: 260px;" />
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <input id="saveNoteBtn" type="submit" value="Salvează" class="btn btn-primary" />
+                <a asp-action="Index" class="btn btn-outline-secondary">Înapoi la listă</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        (() => {
+            const TYPE_TEXT = "1";
+            const TYPE_CHECKBOX = "2";
+            const TYPE_AUDIO = "3";
+            const TYPE_VIDEO = "4";
+            const TYPE_PHOTO = "5";
+            const TYPE_DRAWING = "6";
+
+            const noteType = document.getElementById("NoteTypeId");
+            const createForm = document.querySelector("form[asp-action='Create']") || document.querySelector("form");
+            const saveButton = document.getElementById("saveNoteBtn") || createForm?.querySelector("input[type='submit']");
+            const titleInput = document.getElementById("noteTitleInput") || document.getElementById("Title") || createForm?.querySelector("input[name='Title']");
+            const hiddenContent = document.getElementById("Content");
+            const textEditor = document.getElementById("textContentEditor");
+            const checklistEditor = document.getElementById("checklistEditor");
+            const checklistItems = document.getElementById("checklistItems");
+            const newChecklistItem = document.getElementById("newChecklistItem");
+            const addChecklistItemBtn = document.getElementById("addChecklistItemBtn");
+            const attachmentStudio = document.getElementById("attachmentStudio");
+            const uploadedFilesInput = document.getElementById("uploadedFiles");
+            const selectedFilesPreview = document.getElementById("selectedFilesPreview");
+            const uploadDropZone = document.getElementById("uploadDropZone");
+            const browseFilesBtn = document.getElementById("browseFilesBtn");
+            const attachmentInfo = document.getElementById("attachmentInfo");
+
+            const audioTools = document.getElementById("audioTools");
+            const videoTools = document.getElementById("videoTools");
+            const photoTools = document.getElementById("photoTools");
+            const drawingTools = document.getElementById("drawingTools");
+
+            const startAudioBtn = document.getElementById("startAudioBtn");
+            const stopAudioBtn = document.getElementById("stopAudioBtn");
+            const audioPreview = document.getElementById("audioPreview");
+
+            const startVideoBtn = document.getElementById("startVideoBtn");
+            const stopVideoBtn = document.getElementById("stopVideoBtn");
+            const liveVideoPreview = document.getElementById("liveVideoPreview");
+            const recordedVideoPreview = document.getElementById("recordedVideoPreview");
+
+            const startPhotoCameraBtn = document.getElementById("startPhotoCameraBtn");
+            const capturePhotoBtn = document.getElementById("capturePhotoBtn");
+            const stopPhotoCameraBtn = document.getElementById("stopPhotoCameraBtn");
+            const photoVideoPreview = document.getElementById("photoVideoPreview");
+            const photoCanvas = document.getElementById("photoCanvas");
+
+            const drawingCanvas = document.getElementById("drawingCanvas");
+            const clearDrawingBtn = document.getElementById("clearDrawingBtn");
+            const saveDrawingBtn = document.getElementById("saveDrawingBtn");
+            const drawingColorButtons = document.querySelectorAll(".drawing-color");
+            const drawingPreviewImage = document.getElementById("drawingPreviewImage");
+
+            let items = parseChecklist(hiddenContent.value);
+            let mediaStream = null;
+            let photoStream = null;
+            let mediaRecorder = null;
+            let mediaChunks = [];
+            const selectedFiles = new DataTransfer();
+
+            function parseChecklist(raw) {
+                if (!raw || !raw.trim()) {
+                    return [];
+                }
+
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        return parsed
+                            .map(i => ({
+                                text: typeof i?.text === "string" ? i.text : (typeof i?.Text === "string" ? i.Text : ""),
+                                isChecked: i?.isChecked ?? i?.IsChecked ?? false
+                            }))
+                            .filter(i => i.text.trim().length > 0)
+                            .map(i => ({ text: i.text.trim(), isChecked: !!i.isChecked }));
+                    }
+                } catch (error) {
+                }
+
+                return raw
+                    .split("\n")
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0)
+                    .map(line => ({ text: line, isChecked: false }));
+            }
+
+            function syncContent() {
+                if (noteType.value === TYPE_CHECKBOX) {
+                    hiddenContent.value = JSON.stringify(items);
+                } else {
+                    hiddenContent.value = textEditor.value;
+                }
+
+                updateSaveButtonState();
+            }
+
+            function hasNoteDescription() {
+                if (noteType.value === TYPE_CHECKBOX) {
+                    return items.some(item => (item?.text || "").trim().length > 0);
+                }
+
+                return (textEditor.value || "").trim().length > 0;
+            }
+
+            function hasRequiredFields() {
+                const hasTitle = (titleInput?.value || "").trim().length > 0;
+                return hasTitle && hasNoteDescription();
+            }
+
+            function updateSaveButtonState() {
+                if (!saveButton) {
+                    return;
+                }
+
+                const canSave = hasRequiredFields();
+                saveButton.disabled = !canSave;
+                saveButton.title = canSave ? "" : "Completează titlul și descrierea înainte de salvare.";
+            }
+
+            function renderChecklist() {
+                checklistItems.innerHTML = "";
+                items.forEach((item, index) => {
+                    const li = document.createElement("li");
+                    li.className = "list-group-item d-flex justify-content-between align-items-center gap-2";
+
+                    const wrapper = document.createElement("label");
+                    wrapper.className = "d-flex align-items-center gap-2 mb-0 flex-grow-1";
+
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.checked = item.isChecked;
+                    checkbox.addEventListener("change", () => {
+                        items[index].isChecked = checkbox.checked;
+                        syncContent();
+                    });
+
+                    const text = document.createElement("span");
+                    text.textContent = item.text;
+
+                    wrapper.appendChild(checkbox);
+                    wrapper.appendChild(text);
+
+                    const removeBtn = document.createElement("button");
+                    removeBtn.type = "button";
+                    removeBtn.className = "btn btn-sm btn-outline-danger";
+                    removeBtn.textContent = "Șterge";
+                    removeBtn.addEventListener("click", () => {
+                        items.splice(index, 1);
+                        renderChecklist();
+                    });
+
+                    li.appendChild(wrapper);
+                    li.appendChild(removeBtn);
+                    checklistItems.appendChild(li);
+                });
+
+                syncContent();
+            }
+
+            function addChecklistItem() {
+                const text = newChecklistItem.value.trim();
+                if (!text) {
+                    return;
+                }
+
+                items.push({ text, isChecked: false });
+                newChecklistItem.value = "";
+                renderChecklist();
+                newChecklistItem.focus();
+            }
+
+            function updateSelectedFilesList() {
+                uploadedFilesInput.files = selectedFiles.files;
+                selectedFilesPreview.innerHTML = "";
+
+                for (let i = 0; i < selectedFiles.files.length; i += 1) {
+                    const file = selectedFiles.files[i];
+                    const col = document.createElement("div");
+                    col.className = "col-md-6 col-lg-4";
+
+                    const card = document.createElement("div");
+                    card.className = "card p-2 h-100 attachment-card";
+
+                    if ((file.type || "").startsWith("image/")) {
+                        const img = document.createElement("img");
+                        img.src = URL.createObjectURL(file);
+                        img.alt = "Previzualizare imagine";
+                        img.className = "img-fluid rounded border mb-2 attachment-preview-image";
+                        img.style.maxHeight = "220px";
+                        card.appendChild(img);
+                    } else if ((file.type || "").startsWith("video/")) {
+                        const video = document.createElement("video");
+                        video.src = URL.createObjectURL(file);
+                        video.controls = true;
+                        video.playsInline = true;
+                        video.className = "w-100 rounded border mb-2";
+                        card.appendChild(video);
+                    } else if ((file.type || "").startsWith("audio/")) {
+                        const audio = document.createElement("audio");
+                        audio.src = URL.createObjectURL(file);
+                        audio.controls = true;
+                        audio.className = "w-100 mb-2";
+                        card.appendChild(audio);
+                    } else {
+                        const generic = document.createElement("div");
+                        generic.className = "attachment-generic mb-2";
+                        generic.textContent = "Fișier";
+                        card.appendChild(generic);
+                    }
+
+                    const meta = document.createElement("div");
+                    meta.className = "small text-muted";
+                    meta.textContent = `${Math.round(file.size / 1024)} KB`;
+                    card.appendChild(meta);
+
+                    col.appendChild(card);
+                    selectedFilesPreview.appendChild(col);
+                }
+            }
+
+            function addFile(file) {
+                selectedFiles.items.add(file);
+                updateSelectedFilesList();
+            }
+
+            function getAcceptForCurrentType() {
+                if (noteType.value === TYPE_AUDIO) {
+                    return "audio/*,.mp3,.wav,.ogg,.aac,.m4a,.webm";
+                }
+                if (noteType.value === TYPE_VIDEO) {
+                    return "video/*,.mp4,.mov,.webm,.mkv";
+                }
+                if (noteType.value === TYPE_PHOTO || noteType.value === TYPE_DRAWING) {
+                    return "image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp";
+                }
+                return "";
+            }
+
+            function stopStream(stream) {
+                if (!stream) {
+                    return;
+                }
+
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            function resetMediaViews() {
+                audioPreview.classList.add("d-none");
+                recordedVideoPreview.classList.add("d-none");
+                liveVideoPreview.classList.add("d-none");
+                photoVideoPreview.classList.add("d-none");
+                photoCanvas.classList.add("d-none");
+                liveVideoPreview.srcObject = null;
+                photoVideoPreview.srcObject = null;
+            }
+
+            function configureAttachmentMode() {
+                const isAttachmentType = [TYPE_AUDIO, TYPE_VIDEO, TYPE_PHOTO, TYPE_DRAWING].includes(noteType.value);
+                attachmentStudio.classList.toggle("d-none", !isAttachmentType);
+
+                if (!isAttachmentType) {
+                    stopStream(mediaStream);
+                    stopStream(photoStream);
+                    mediaStream = null;
+                    photoStream = null;
+                    resetMediaViews();
+                    return;
+                }
+
+                uploadedFilesInput.setAttribute("accept", getAcceptForCurrentType());
+                const modeLabel = noteType.value === TYPE_AUDIO
+                    ? "Poți adăuga fișiere audio sau înregistra direct din microfon."
+                    : noteType.value === TYPE_VIDEO
+                        ? "Poți adăuga fișiere video sau înregistra direct din cameră."
+                        : noteType.value === TYPE_PHOTO
+                            ? "Poți încărca imagini sau captura direct din cameră."
+                            : "Poți încărca imagini și desene salvate din canvas.";
+
+                attachmentInfo.textContent = modeLabel;
+
+                audioTools.classList.toggle("d-none", noteType.value !== TYPE_AUDIO);
+                videoTools.classList.toggle("d-none", noteType.value !== TYPE_VIDEO);
+                photoTools.classList.toggle("d-none", noteType.value !== TYPE_PHOTO);
+                drawingTools.classList.toggle("d-none", noteType.value !== TYPE_DRAWING);
+            }
+
+            function toggleMode() {
+                const isChecklist = noteType.value === TYPE_CHECKBOX;
+                textEditor.classList.toggle("d-none", isChecklist);
+                checklistEditor.classList.toggle("d-none", !isChecklist);
+
+                if (isChecklist) {
+                    items = parseChecklist(hiddenContent.value);
+                    renderChecklist();
+                } else {
+                    textEditor.value = hiddenContent.value;
+                }
+
+                configureAttachmentMode();
+                syncContent();
+            }
+
+            function validateAudioDescription() {
+                if (noteType.value !== TYPE_AUDIO) {
+                    return true;
+                }
+
+                const contentValue = (hiddenContent.value || "").trim();
+                if (contentValue.length > 0) {
+                    return true;
+                }
+
+                window.alert("Notițele audio trebuie să aibă descriere. Completează descrierea înainte de salvare.");
+                textEditor.focus();
+                return false;
+            }
+
+            uploadedFilesInput.addEventListener("change", () => {
+                Array.from(uploadedFilesInput.files).forEach(file => selectedFiles.items.add(file));
+                updateSelectedFilesList();
+            });
+
+            browseFilesBtn?.addEventListener("click", () => uploadedFilesInput.click());
+
+            const preventDefaults = event => {
+                event.preventDefault();
+                event.stopPropagation();
+            };
+
+            ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+                uploadDropZone?.addEventListener(eventName, preventDefaults);
+            });
+
+            ["dragenter", "dragover"].forEach(eventName => {
+                uploadDropZone?.addEventListener(eventName, () => uploadDropZone.classList.add("drag-over"));
+            });
+
+            ["dragleave", "drop"].forEach(eventName => {
+                uploadDropZone?.addEventListener(eventName, () => uploadDropZone.classList.remove("drag-over"));
+            });
+
+            uploadDropZone?.addEventListener("drop", event => {
+                const dropped = Array.from(event.dataTransfer?.files ?? []);
+                dropped.forEach(file => selectedFiles.items.add(file));
+                updateSelectedFilesList();
+            });
+
+            uploadDropZone?.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    uploadedFilesInput.click();
+                }
+            });
+
+            startAudioBtn?.addEventListener("click", async () => {
+                if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+                    window.alert("Browserul nu suportă înregistrare audio directă.");
+                    return;
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaChunks = [];
+                mediaRecorder = new MediaRecorder(mediaStream);
+                mediaRecorder.ondataavailable = e => mediaChunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(mediaChunks, { type: "audio/webm" });
+                    const file = new File([blob], `audio-${Date.now()}.webm`, { type: blob.type });
+                    addFile(file);
+                    audioPreview.src = URL.createObjectURL(blob);
+                    audioPreview.classList.remove("d-none");
+                    stopStream(mediaStream);
+                    mediaStream = null;
+                };
+
+                mediaRecorder.start();
+                startAudioBtn.disabled = true;
+                stopAudioBtn.disabled = false;
+            });
+
+            stopAudioBtn?.addEventListener("click", () => {
+                mediaRecorder?.stop();
+                startAudioBtn.disabled = false;
+                stopAudioBtn.disabled = true;
+            });
+
+            startVideoBtn?.addEventListener("click", async () => {
+                if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+                    window.alert("Browserul nu suportă înregistrare video directă.");
+                    return;
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                liveVideoPreview.srcObject = mediaStream;
+                liveVideoPreview.classList.remove("d-none");
+
+                mediaChunks = [];
+                mediaRecorder = new MediaRecorder(mediaStream);
+                mediaRecorder.ondataavailable = e => mediaChunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(mediaChunks, { type: "video/webm" });
+                    const file = new File([blob], `video-${Date.now()}.webm`, { type: blob.type });
+                    addFile(file);
+                    recordedVideoPreview.src = URL.createObjectURL(blob);
+                    recordedVideoPreview.classList.remove("d-none");
+                    stopStream(mediaStream);
+                    mediaStream = null;
+                    liveVideoPreview.classList.add("d-none");
+                    liveVideoPreview.srcObject = null;
+                };
+
+                mediaRecorder.start();
+                startVideoBtn.disabled = true;
+                stopVideoBtn.disabled = false;
+            });
+
+            stopVideoBtn?.addEventListener("click", () => {
+                mediaRecorder?.stop();
+                startVideoBtn.disabled = false;
+                stopVideoBtn.disabled = true;
+            });
+
+            startPhotoCameraBtn?.addEventListener("click", async () => {
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    window.alert("Browserul nu suportă captura foto directă.");
+                    return;
+                }
+
+                photoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                photoVideoPreview.srcObject = photoStream;
+                photoVideoPreview.classList.remove("d-none");
+                capturePhotoBtn.disabled = false;
+                stopPhotoCameraBtn.disabled = false;
+            });
+
+            capturePhotoBtn?.addEventListener("click", () => {
+                if (!photoStream) {
+                    return;
+                }
+
+                const width = photoVideoPreview.videoWidth || 1280;
+                const height = photoVideoPreview.videoHeight || 720;
+                photoCanvas.width = width;
+                photoCanvas.height = height;
+                const ctx = photoCanvas.getContext("2d");
+                ctx.drawImage(photoVideoPreview, 0, 0, width, height);
+                photoCanvas.classList.remove("d-none");
+
+                photoCanvas.toBlob(blob => {
+                    if (!blob) {
+                        return;
+                    }
+
+                    const file = new File([blob], `photo-${Date.now()}.png`, { type: "image/png" });
+                    addFile(file);
+                }, "image/png");
+            });
+
+            stopPhotoCameraBtn?.addEventListener("click", () => {
+                stopStream(photoStream);
+                photoStream = null;
+                photoVideoPreview.classList.add("d-none");
+                photoVideoPreview.srcObject = null;
+                capturePhotoBtn.disabled = true;
+                stopPhotoCameraBtn.disabled = true;
+            });
+
+            const drawCtx = drawingCanvas?.getContext("2d");
+            if (drawCtx) {
+                drawCtx.fillStyle = "#0f1224";
+                drawCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                let currentDrawingColor = "#f1d9a9";
+                drawCtx.strokeStyle = currentDrawingColor;
+                drawCtx.lineWidth = 3;
+                drawCtx.lineCap = "round";
+
+                const applyActiveDrawingButtonStyle = button => {
+                    drawingColorButtons.forEach(b => {
+                        b.classList.remove("drawing-color-active");
+                        b.style.removeProperty("background-color");
+                        b.style.removeProperty("border-color");
+                        b.style.removeProperty("color");
+                    });
+
+                    const color = button.getAttribute("data-color") || "#f1d9a9";
+                    button.classList.add("drawing-color-active");
+                    button.style.backgroundColor = color;
+                    button.style.borderColor = color;
+                    button.style.color = color.toLowerCase() === "#ffffff" ? "#111111" : "#111111";
+                };
+
+                const initiallyActiveButton = Array.from(drawingColorButtons).find(b => b.classList.contains("drawing-color-active")) || drawingColorButtons[0];
+                if (initiallyActiveButton) {
+                    currentDrawingColor = initiallyActiveButton.getAttribute("data-color") || "#f1d9a9";
+                    drawCtx.strokeStyle = currentDrawingColor;
+                    applyActiveDrawingButtonStyle(initiallyActiveButton);
+                }
+
+                let drawing = false;
+
+                const getPos = event => {
+                    const rect = drawingCanvas.getBoundingClientRect();
+                    const point = event.touches ? event.touches[0] : event;
+                    const scaleX = drawingCanvas.width / rect.width;
+                    const scaleY = drawingCanvas.height / rect.height;
+                    return {
+                        x: (point.clientX - rect.left) * scaleX,
+                        y: (point.clientY - rect.top) * scaleY
+                    };
+                };
+
+                const start = event => {
+                    drawing = true;
+                    const p = getPos(event);
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(p.x, p.y);
+                    event.preventDefault();
+                };
+
+                const move = event => {
+                    if (!drawing) {
+                        return;
+                    }
+                    const p = getPos(event);
+                    drawCtx.lineTo(p.x, p.y);
+                    drawCtx.stroke();
+                    event.preventDefault();
+                };
+
+                const end = () => {
+                    drawing = false;
+                };
+
+                drawingCanvas.addEventListener("mousedown", start);
+                drawingCanvas.addEventListener("mousemove", move);
+                window.addEventListener("mouseup", end);
+                drawingCanvas.addEventListener("touchstart", start, { passive: false });
+                drawingCanvas.addEventListener("touchmove", move, { passive: false });
+                drawingCanvas.addEventListener("touchend", end);
+
+                clearDrawingBtn?.addEventListener("click", () => {
+                    drawCtx.fillStyle = "#0f1224";
+                    drawCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                });
+
+                drawingColorButtons.forEach(button => {
+                    button.addEventListener("click", () => {
+                        currentDrawingColor = button.getAttribute("data-color") || "#f1d9a9";
+                        drawCtx.strokeStyle = currentDrawingColor;
+                        applyActiveDrawingButtonStyle(button);
+                    });
+                });
+
+                saveDrawingBtn?.addEventListener("click", () => {
+                    drawingCanvas.toBlob(blob => {
+                        if (!blob) {
+                            return;
+                        }
+
+                        const file = new File([blob], `desen-${Date.now()}.png`, { type: "image/png" });
+                        addFile(file);
+
+                        if (drawingPreviewImage) {
+                            drawingPreviewImage.src = URL.createObjectURL(blob);
+                            drawingPreviewImage.classList.remove("d-none");
+                        }
+                    }, "image/png");
+                });
+            }
+
+            addChecklistItemBtn?.addEventListener("click", addChecklistItem);
+            newChecklistItem?.addEventListener("keydown", event => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    addChecklistItem();
+                }
+            });
+            titleInput?.addEventListener("input", updateSaveButtonState);
+            createForm?.addEventListener("input", updateSaveButtonState);
+            createForm?.addEventListener("change", updateSaveButtonState);
+            textEditor.addEventListener("input", syncContent);
+
+            createForm?.addEventListener("submit", event => {
+                syncContent();
+                if (!hasRequiredFields()) {
+                    event.preventDefault();
+                    return;
+                }
+                if (!validateAudioDescription()) {
+                    event.preventDefault();
+                }
+            });
+
+            textEditor.value = hiddenContent.value;
+            toggleMode();
+        })();
+    </script>
+}
