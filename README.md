@@ -121,14 +121,7 @@ Fisiere:
 - `Views/Notes/Details.cshtml`
 - `Controllers/NotesController.cs`
 
-## 4. Migrate / schema
-Migrari existente:
-- `00000000000000_CreateIdentitySchema`
-- `20260327132126_AddNotesAndNoteTypes`
-- `20260327141138_AddMediaNoteAttachments`
-- `20260327144820_AddNoteFoldersAndBulkSelection`
-
-## 5. Cum rulezi proiectul
+## 4. Cum rulezi proiectul
 1. Restore + build:
    - `dotnet restore`
    - `dotnet build`
@@ -139,7 +132,7 @@ Migrari existente:
 
 Aplicatia porneste pe localhost (portul il vezi in output-ul `dotnet run`).
 
-## 6. Observatii practice
+## 5. Observatii practice
 - Daca ai aplicatia deja pornita, un nou `dotnet build` poate da eroare de fisier blocat (`SST Hackaton.dll`).
   - Solutie: opresti procesul curent, apoi rulezi build din nou.
 - Atasamentele sunt stocate local in `App_Data/uploads/...` si sunt legate de user + nota. În viitor, se poate trece ușor la stocare în Cloud.
