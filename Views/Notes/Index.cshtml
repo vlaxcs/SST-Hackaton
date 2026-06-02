@@ -1,43 +1,58 @@
 @model NoteIndexViewModel
 @{
     ViewData["Title"] = "Notițele mele";
+
+    var highlightedIdsRaw = TempData["ImportedNoteHighlightIds"] as string;
+    var highlightedImportedIds = string.IsNullOrWhiteSpace(highlightedIdsRaw)
+        ? new HashSet<int>()
+        : highlightedIdsRaw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(value => int.TryParse(value, out var parsed) ? parsed : 0)
+            .Where(id => id > 0)
+            .ToHashSet();
 }
+
+<style>
+    .note-card-imported-new {
+        border: 2px solid #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.18), 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+    }
+</style>
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="mb-0">Notițele mele</h1>
     <div class="d-flex gap-2">
         <button id="toggleSelectionModeBtn" type="button" class="btn btn-sm btn-outline-primary px-3">Selectează multiple</button>
-        <button id="openNewNoteModalBtn" type="button" class="btn btn-sm btn-primary px-3">Adaugă notiță</button>
+        <form asp-action="DownloadAllAsZip" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-secondary px-3">Descarcă tot (ZIP)</button>
+        </form>
+        <a asp-action="Create" class="btn btn-sm btn-primary px-3">Adaugă notiță</a>
     </div>
 </div>
 
-<div id="newNoteTypeModal" class="mystic-modal d-none" role="dialog" aria-modal="true" aria-labelledby="newNoteTypeModalTitle">
-    <div class="mystic-modal-backdrop" data-close-modal="true"></div>
-    <div class="mystic-modal-panel mystic-panel p-4 p-md-5">
-        <h3 id="newNoteTypeModalTitle" class="mb-2">Alege tipul notiței</h3>
-        <p class="text-muted mb-4">După creare, tipul notiței nu mai poate fi schimbat.</p>
-        <div class="d-flex flex-column gap-2">
-            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="1">Notiță text</a>
-            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="2">Listă de bifat</a>
-            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="3">Înregistrare audio</a>
-            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="4">Înregistrare video</a>
-            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="5">Fotografie</a>
-            <a class="btn btn-outline-primary" asp-action="Create" asp-route-noteTypeId="6">Desen</a>
-            <button id="cancelNewNoteTypeModal" type="button" class="btn btn-primary mt-2">Renunță</button>
+<form asp-action="ImportZip" method="post" enctype="multipart/form-data" class="mystic-panel p-3 mb-3">
+    @Html.AntiForgeryToken()
+    <div class="d-flex flex-wrap align-items-end gap-2">
+        <div class="flex-grow-1" style="min-width: 240px;">
+            <label for="importZipInput" class="form-label mb-1">Importă backup ZIP</label>
+            <input id="importZipInput" name="importZip" type="file" accept=".zip,application/zip" class="form-control" required />
+            <div class="form-text">ZIP-ul trebuie să conțină câte un folder per notiță și fișierul note.json.</div>
         </div>
+        <button type="submit" class="btn btn-outline-primary">Importă ZIP</button>
     </div>
-</div>
+</form>
+
+@if (TempData["ImportExportMessage"] is string importExportMessage && !string.IsNullOrWhiteSpace(importExportMessage))
+{
+    <div class="alert alert-info">@importExportMessage</div>
+}
 
 <form id="notesSearchForm" asp-action="Index" method="get" class="row g-2 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-5">
         <input id="searchTerm" type="text" name="searchTerm" value="@Model.SearchTerm" class="form-control" placeholder="Caută în titlu, conținut sau dată" />
     </div>
-    <div class="col-md-2">
-        <select id="noteTypeId" name="noteTypeId" class="form-select" asp-items="Model.NoteTypeOptions">
-            <option value="">Toate tipurile de notițe</option>
-        </select>
-    </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
         <select id="folderName" name="folderName" class="form-select">
             <option value="">Toate folderele</option>
             @foreach (var folder in Model.FolderOptions)
@@ -76,6 +91,7 @@
             </datalist>
         </div>
         <button type="submit" formaction="@Url.Action("BulkMoveToFolder", "Notes")" class="btn btn-outline-primary" id="bulkMoveBtn" disabled>Mută în folder</button>
+        <button type="submit" formaction="@Url.Action("DownloadSelectedAsZip", "Notes")" class="btn btn-outline-secondary" id="bulkDownloadBtn" disabled>Descarcă selectate (ZIP)</button>
         <button type="submit" formaction="@Url.Action("BulkDelete", "Notes")" class="btn btn-outline-danger" id="bulkDeleteBtn" disabled onclick="return confirm('Ești sigur că vrei să ștergi notițele selectate?');">Șterge selectate</button>
         <button type="button" id="cancelSelectionBtn" class="btn btn-outline-secondary">Anulează selecția</button>
     </div>
@@ -93,8 +109,9 @@ else
     <div id="notesGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
         @foreach (var note in Model.Notes)
         {
+            var isImportedHighlight = highlightedImportedIds.Contains(note.Id);
             <div class="col">
-                <div class="card h-100 shadow-sm note-card" data-note-card="@note.Id">
+                <div class="card h-100 shadow-sm note-card @(isImportedHighlight ? "note-card-imported-new" : string.Empty)" data-note-card="@note.Id">
                     <div class="note-select-box d-none px-3 pt-3">
                         <div class="form-check">
                             <input class="form-check-input note-select-checkbox" type="checkbox" data-note-checkbox="@note.Id" />
@@ -103,7 +120,7 @@ else
                     </div>
                     <div class="card-body">
                         <h5 class="card-title text-truncate">@note.Title</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">@NoteContentHelper.NoteTypeNameRo(note.NoteType?.Name)</h6>
+                        <h6 class="card-subtitle mb-2 text-muted">Notiță mixtă</h6>
                         @if (!string.IsNullOrWhiteSpace(note.FolderName))
                         {
                             <p class="small mb-2">
@@ -111,48 +128,20 @@ else
                                    asp-action="Index"
                                    asp-route-folderName="@note.FolderName"
                                    asp-route-searchTerm="@Model.SearchTerm"
-                                   asp-route-noteTypeId="@Model.NoteTypeId"
                                    asp-route-sortOrder="@Model.SortOrder">
                                     Folder: @note.FolderName
                                 </a>
                             </p>
                         }
+                        <p class="card-text mb-2">
+                            @(string.IsNullOrWhiteSpace(note.Content)
+                                ? "Fără descriere"
+                                : (note.Content.Length > 220 ? note.Content[..220] + "..." : note.Content))
+                        </p>
 
-                        @if (NoteContentHelper.IsCheckboxTypeName(note.NoteType?.Name))
-                        {
-                            var allItems = NoteContentHelper.ParseChecklistContent(note.Content);
-                            var previewLimit = 6;
-                            var items = allItems.Take(previewLimit);
-                            var remainingCount = Math.Max(0, allItems.Count - previewLimit);
-                            <ul class="list-unstyled small mb-2">
-                                @foreach (var item in items)
-                                {
-                                    <li><input type="checkbox" disabled checked="@item.IsChecked" /> @item.Text</li>
-                                }
-                            </ul>
-                            @if (remainingCount > 0)
-                            {
-                                <p class="small text-muted mb-0">Și alte @remainingCount checkboxuri</p>
-                            }
-                        }
-                        else if (NoteContentHelper.IsAttachmentNoteTypeName(note.NoteType?.Name))
-                        {
-                            <p class="card-text mb-2">
-                                @(string.IsNullOrWhiteSpace(note.Content)
-                                    ? "Fără descriere"
-                                    : (note.Content.Length > 180 ? note.Content[..180] + "..." : note.Content))
-                            </p>
-
-                            <p class="small text-muted mb-0">
-                                @note.Attachments.Count atașament(e)
-                            </p>
-                        }
-                        else
-                        {
-                            <p class="card-text">
-                                @(note.Content.Length > 220 ? note.Content[..220] + "..." : note.Content)
-                            </p>
-                        }
+                        <p class="small text-muted mb-0">
+                            @note.Attachments.Count atașament(e)
+                        </p>
                     </div>
                     <div class="card-footer bg-white small text-muted">
                         <div>Creat: @note.CreatedAtUtc.ToLocalTime().ToString("g")</div>
@@ -173,7 +162,6 @@ else
         (() => {
             const form = document.getElementById("notesSearchForm");
             const searchInput = document.getElementById("searchTerm");
-            const noteType = document.getElementById("noteTypeId");
             const folderName = document.getElementById("folderName");
             const sortOrder = document.getElementById("sortOrder");
             const notesGrid = document.getElementById("notesGrid");
@@ -183,43 +171,17 @@ else
             const selectedNoteIdsInput = document.getElementById("selectedNoteIds");
             const bulkFolderName = document.getElementById("bulkFolderName");
             const bulkMoveBtn = document.getElementById("bulkMoveBtn");
+            const bulkDownloadBtn = document.getElementById("bulkDownloadBtn");
             const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
             const selectionCountText = document.getElementById("selectionCountText");
-            const openNewNoteModalBtn = document.getElementById("openNewNoteModalBtn");
-            const newNoteTypeModal = document.getElementById("newNoteTypeModal");
-            const cancelNewNoteTypeModal = document.getElementById("cancelNewNoteTypeModal");
-            const modalBackdrop = newNoteTypeModal?.querySelector("[data-close-modal='true']");
 
-            if (!form || !searchInput || !noteType || !folderName || !sortOrder || !newNoteTypeModal) {
+            if (!form || !searchInput || !folderName || !sortOrder) {
                 return;
             }
-
-            const openModal = () => {
-                newNoteTypeModal.classList.remove("d-none");
-                document.body.classList.add("mystic-modal-open");
-            };
-
-            const closeModal = () => {
-                newNoteTypeModal.classList.add("d-none");
-                document.body.classList.remove("mystic-modal-open");
-            };
-
-            openNewNoteModalBtn?.addEventListener("click", openModal);
-            cancelNewNoteTypeModal?.addEventListener("click", closeModal);
-            modalBackdrop?.addEventListener("click", closeModal);
-
-            document.addEventListener("keydown", event => {
-                if (event.key === "Escape") {
-                    closeModal();
-                }
-            });
 
             const params = new URLSearchParams(window.location.search);
             if (params.has("searchTerm")) {
                 searchInput.value = params.get("searchTerm") ?? "";
-            }
-            if (params.has("noteTypeId")) {
-                noteType.value = params.get("noteTypeId") ?? "";
             }
             if (params.has("folderName")) {
                 folderName.value = params.get("folderName") ?? "";
@@ -237,13 +199,8 @@ else
             };
 
             searchInput.addEventListener("input", debounceSubmit);
-            noteType.addEventListener("change", debounceSubmit);
             folderName.addEventListener("change", debounceSubmit);
             sortOrder.addEventListener("change", debounceSubmit);
-
-            if (params.get("openNewNoteModal") === "1") {
-                openModal();
-            }
 
             const selection = new Set();
             let selectionMode = false;
@@ -279,6 +236,10 @@ else
 
                 if (bulkDeleteBtn) {
                     bulkDeleteBtn.disabled = selectedCount === 0;
+                }
+
+                if (bulkDownloadBtn) {
+                    bulkDownloadBtn.disabled = selectedCount === 0;
                 }
 
                 if (bulkMoveBtn) {

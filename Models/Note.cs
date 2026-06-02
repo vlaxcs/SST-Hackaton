@@ -20,10 +20,6 @@ public class Note
     [Display(Name = "Folder")]
     public string? FolderName { get; set; }
 
-    [Display(Name = "Tip notiță")]
-    public int NoteTypeId { get; set; }
-    public NoteType? NoteType { get; set; }
-
     [Display(Name = "Creat la")]
     public DateTime CreatedAtUtc { get; set; }
 

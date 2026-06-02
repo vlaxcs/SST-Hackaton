@@ -9,34 +9,18 @@
 <div class="card shadow-sm mb-3">
     <div class="card-body">
         <h4>@Model.Title</h4>
-        <div class="text-muted mb-3">@NoteContentHelper.NoteTypeNameRo(Model.NoteType?.Name)</div>
-        @if (NoteContentHelper.IsCheckboxTypeName(Model.NoteType?.Name))
+        <div class="text-muted mb-3">Notiță mixtă</div>
+        <p style="white-space: pre-wrap;">@(string.IsNullOrWhiteSpace(Model.Content) ? "Fără descriere" : Model.Content)</p>
+
+        @if (Model.Attachments.Any())
         {
+            <h6 class="mt-3">Atașamente</h6>
             <ul class="list-group list-group-flush mb-3">
-                @foreach (var item in NoteContentHelper.ParseChecklistContent(Model.Content))
+                @foreach (var attachment in Model.Attachments)
                 {
-                    <li class="list-group-item"><input type="checkbox" disabled checked="@item.IsChecked" /> @item.Text</li>
+                    <li class="list-group-item">@attachment.OriginalFileName</li>
                 }
             </ul>
-        }
-        else if (NoteContentHelper.IsAttachmentNoteTypeName(Model.NoteType?.Name))
-        {
-            <p style="white-space: pre-wrap;">@(string.IsNullOrWhiteSpace(Model.Content) ? "Fără descriere" : Model.Content)</p>
-
-            @if (Model.Attachments.Any())
-            {
-                <h6 class="mt-3">Atașamente</h6>
-                <ul class="list-group list-group-flush mb-3">
-                    @foreach (var attachment in Model.Attachments)
-                    {
-                        <li class="list-group-item">@attachment.OriginalFileName</li>
-                    }
-                </ul>
-            }
-        }
-        else
-        {
-            <p style="white-space: pre-wrap;">@Model.Content</p>
         }
     </div>
 </div>
